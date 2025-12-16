@@ -1,3 +1,6 @@
 langchain
 langchain-community
 PyMuPDF
+faiss-cpu
+langchain-ollama
+rank-bm25
