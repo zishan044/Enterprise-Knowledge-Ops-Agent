@@ -10,6 +10,7 @@ class Config:
     splitter_type: str = "recursive"
 
     router_model: str = "mistral"
+    planner_model: str = "mistral"
     
     chunk_size: int = 1000
     chunk_overlap: int = 200
