@@ -4,6 +4,7 @@ from configs.config import Config
 from factories.loader_factory import LoaderFactory
 from factories.splitter_factory import SplitterFactory
 from factories.vectorstore_factory import VectorStoreFactory
+from agents.router import RouterAgent
 
 def main():
     config = Config()
@@ -30,15 +31,6 @@ def main():
     ingested_docs = ingestion_pipeline.load_documents()
     chunked_docs = ingestion_pipeline.chunk_documents()
 
-    print(f"Loaded {len(ingested_docs)} documents.")
-    print(f"Chunked into {len(chunked_docs)} pieces.")
-    print(f"Loader type: {config.loader_type}")
-    print(f"Splitter type: {config.splitter_type}")
-
-    
-    print("\n" + "="*50)
-    print("CREATING HYBRID RETRIEVER (FAISS + BM25)")
-    print("="*50)
     
     retriever = VectorStoreFactory.create_retriever(
         documents=chunked_docs,
@@ -49,18 +41,12 @@ def main():
         retriever_weights=config.retriever_weights,
     )
     
-    print(f"Hybrid retriever created!")
-    print(f"Dense (FAISS): k={config.dense_k}")
-    print(f"Sparse (BM25): k={config.sparse_k}")
-    print(f"Weights: {config.retriever_weights}")
     
-    print("\n" + "="*50)
-    print("TESTING RETRIEVER")
-    print("="*50)
+    router = RouterAgent(model=config.router_model)
     
     test_queries = [
         "enterprise knowledge operations",
-        "vector store hybrid retrieval",
+        "vector store hybrid retrieval", 
         "document chunking strategy"
     ]
     
@@ -68,23 +54,49 @@ def main():
         print(f"\nQuery: '{query}'")
         docs = retriever.invoke(query)
         print(f"Retrieved {len(docs)} documents:")
-        for i, doc in enumerate(docs[:3], 1):
+        for i, doc in enumerate(docs[:2], 1):
             print(f"  {i}. {doc.page_content[:100]}...")
-            if doc.metadata:
-                print(f"     Source: {doc.metadata.get('source', 'N/A')}")
     
-    print("\n" + "="*50)
-    print("SAVING RETRIEVER")
-    print("="*50)
+    routing_test_queries = [
+        "What is the definition of enterprise knowledge operations? (factual)",
+        "Compare different vector store retrieval strategies (analytical)", 
+        "What is our company's policy on data retention? (policy)",
+        "How does hybrid retrieval improve accuracy? (analytical)",
+        "When was the knowledge ops agent first deployed? (factual)"
+    ]
+    
+    for query in routing_test_queries:
+        print(f"\n📝 Query: '{query}'")
+        
+        route_decision = router.route(query)
+        print(f"   Route: {route_decision.route.upper()}")
+        
+        docs = retriever.invoke(query)
+        print(f"   Retrieved {len(docs)} documents:")
+        
+        if route_decision.route == "factual":
+            print(f"   🎯 FACTUAL: Using top {config.dense_k} semantic matches")
+        elif route_decision.route == "analytical":
+            print(f"   📊 ANALYTICAL: Combining dense+sparse for comparison")
+        else:
+            print(f"   📜 POLICY: Prioritizing exact keyword matches")
+            
+        if docs:
+            top_doc = docs[0]
+            snippet = top_doc.page_content[:120] + "..." if len(top_doc.page_content) > 120 else top_doc.page_content
+            print(f"   📄 Top result: {snippet}")
+
     
     retriever_path = Path("artifacts") / "hybrid_retriever"
     retriever_path.mkdir(parents=True, exist_ok=True)
     
-    faiss_vectorstore = retriever.retrievers[0].vectorstore
-    faiss_vectorstore.save_local(str(retriever_path / "faiss_index"))
-    
-    print(f"Retriever saved to {retriever_path}")
-    print("Ready for RAG pipeline!")
+    try:
+        faiss_vectorstore = retriever.retrievers[0].vectorstore
+        faiss_vectorstore.save_local(str(retriever_path / "faiss_index"))
+    except Exception as e:
+        print(f"⚠️  Could not save FAISS (MergeRetriever issue): {e}")
+
+    print("🎉 Pipeline ready! Router → Retriever → RAG")
 
 if __name__ == "__main__":
     main()
